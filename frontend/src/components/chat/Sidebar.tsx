@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, forwardRef, useImperativeHandle } from 'react';
 import styled from 'styled-components';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
@@ -11,7 +11,11 @@ type SidebarProps = {
   selectedChatId: string | null;
 };
 
-export const Sidebar: React.FC<SidebarProps> = ({onChatSelected, selectedChatId}) => {
+type SidebarHandle = {
+  fetchChats: () => void;
+};
+
+export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(({onChatSelected, selectedChatId}, ref) => {
   const [chats, setChats] = useState<Chat[]>([]);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
@@ -24,7 +28,7 @@ export const Sidebar: React.FC<SidebarProps> = ({onChatSelected, selectedChatId}
     fetch('http://localhost:8000/api/chats/')
       .then((response) => response.json())
       .then((data) => {
-        const sortedChats = sortChats(data.chats)
+        const sortedChats = sortChats(data.chats);
         setChats(sortedChats);
       });
   };
@@ -36,8 +40,8 @@ export const Sidebar: React.FC<SidebarProps> = ({onChatSelected, selectedChatId}
 
       // sort in descending order
       return dateB.getTime() - dateA.getTime();
-    })
-  }
+    });
+  };
 
   const createChat = () => {
     fetch('http://localhost:8000/api/chats/', {
@@ -73,6 +77,10 @@ export const Sidebar: React.FC<SidebarProps> = ({onChatSelected, selectedChatId}
     setShowSettingsModal(true);
   };
 
+  useImperativeHandle(ref, () => ({
+    fetchChats
+  }));
+
   return (
     <SidebarContainer>
       <ChatListContainer>
@@ -100,7 +108,7 @@ export const Sidebar: React.FC<SidebarProps> = ({onChatSelected, selectedChatId}
       )}
     </SidebarContainer>
   );
-};
+});
 
 const SidebarContainer = styled.div`
   width: 16vw;
@@ -108,7 +116,7 @@ const SidebarContainer = styled.div`
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: 90vh; // Adjust the height to fit your layout
+  height: 100%; // Adjust the height to fit your layout
 `;
 
 const ChatListContainer = styled.div`
@@ -167,3 +175,5 @@ const SettingsRow = styled.div`
   justify-content: center;
   align-items: center;
 `;
+
+export default Sidebar;

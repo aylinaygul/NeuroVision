@@ -26,7 +26,7 @@ const UserSignin = () => {
       await signInWithEmailAndPassword(auth, formData.email, formData.password);
       setMessage('Giriş yapıldı. Yönlendiriliyorsunuz...');
       setTimeout(() => {
-        navigate('/detect');  // Giriş başarılıysa kullanıcıyı /detect sayfasına yönlendir
+        navigate('');  // Giriş başarılıysa kullanıcıyı /detect sayfasına yönlendir
       }, 1000);  // 1 saniye bekleme, mesajın görünmesini sağlamak için
 
     } catch (error) {

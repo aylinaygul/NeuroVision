@@ -9,13 +9,14 @@ import UserSignup from './pages/UserSignup';
 import UserSignin from './pages/UserSignin';
 import Detect from './pages/Detect';
 import UserPics from './pages/UserPics';
+import LandingLayout from './pages/LandingLayout/LandingLayout';
 
 export const App = () => {
  
   return (
     <>
     <BrowserRouter>
-        <AppBar position="static"sx={{ backgroundColor: '#191970' }} >
+        {/* <AppBar position="static"sx={{ backgroundColor: '#191970' }} >
           <Toolbar>
             <Typography variant="h6" component="div" fontWeight={"bold"}
             sx={{ flexGrow: 1, 
@@ -28,12 +29,14 @@ export const App = () => {
             <Button color="inherit" component={Link} to="/detect">detect tumor</Button>
             <Button color="inherit" component={Link} to="/userpics">user pics</Button>
           </Toolbar>
-        </AppBar>
+        </AppBar> */}
           <Routes>
             <Route path="/home" element={<Home />} />
             <Route path="/UserSignin" element={<UserSignin />} />
             <Route path="/UserSignup" element={<UserSignup />} />
-            <Route path="/detect" element={<Detect />} />
+            <Route path='' element={<LandingLayout />}>
+              <Route path="detect" element={<Detect/>} />
+            </Route>
             <Route path="/userpics" element={<UserPics />} />
           </Routes>
       </BrowserRouter>

@@ -3,35 +3,84 @@ import { Button, Typography, Box, Grid, CircularProgress } from '@mui/material';
 import { Sidebar } from '../components/chat/Sidebar';
 import { ChatBox } from '../components/chat/ChatBox';
 import { ChatInput } from "../components/chat/ChatInput";
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import ReconnectingWebSocket from "reconnecting-websocket";
 import { Message } from "../data/Message";
 import { ChatMenu } from "../components/chat/debug/ChatMenu";
 import { DebugDrawer } from "../components/chat/debug/DebugDrawer";
-
-
 import ImageIcon from '@mui/icons-material/Image';
 import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
 
+const fadeIn = keyframes`
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+`;
+
+const rotate = keyframes`
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+`;
+
+const GothicBox = styled(Box)`
+  background-color: #292b2c;
+  color: #f5f5f5;
+  border: 2px solid #444;
+  box-shadow: 0 0 15px #000;
+  padding: 20px;
+  margin: 20px 0;
+  border-radius: 10px;
+  animation: ${fadeIn} 0.5s ease-in-out;
+`;
+
+const GothicButton = styled(Button)`
+  background-color: #444;
+  color: #f5f5f5;
+  &:hover {
+    background-color: #555;
+  }
+`;
+
+const RotatingIcon = styled(ImageIcon)`
+  font-size: 64px;
+  color: #f5f5f5;
+  animation: ${rotate} 2s linear infinite;
+`;
+
+const BackgroundImageBox = styled(Box)(({ theme }) => ({
+  width: '100%',
+  gap: 2,
+  backgroundSize: 'contain',
+  
+  backgroundPosition: '10% 70%;',
+  backgroundImage: 'url(/Brain_2_1.png)',
+  height: '100vh',
+  opacity: 0.4,
+}));
+
 function DetectTumor() {
   const [inputImage, setInputImage] = useState<string | null>(null);
   const [result, setResult] = useState('');
-  const [processImages, setProcessImages] = useState([]);
-  const [buttonText, setButtonText] = useState('MRI Görüntüsü Yükle');
-  const [showResult, setShowResult] = useState(false);
-  const [showSaveButton, setShowSaveButton] = useState(false);
-  const [detectionResult, setDetectionResult] = useState('');
-
-   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const webSocket = useRef<ReconnectingWebSocket | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [imageLoading, setImageLoading] = useState(false);
   const [debugMessage, setDebugMessage] = useState<string>("");
   const [debugMode, setDebugMode] = useState<boolean>(false);
-
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [file, setFile] = useState<any>(null);
+  const [prompt, setPrompt] = useState<string>("");
+
+  const sideRef = useRef<any>(null);
 
   const onDrop = (acceptedFiles: any) => {
     const selectedFile = acceptedFiles[0];
@@ -40,59 +89,53 @@ function DetectTumor() {
 
   //@ts-ignore
   const { getRootProps, getInputProps } = useDropzone({ onDrop, accept: '.nii,.nii.gz' });
-  // Set up websocket connection when currentChatId changes
+
   useEffect(() => {
     if (currentChatId) {
       webSocket.current = new ReconnectingWebSocket(`ws://localhost:8000/ws/chat/${currentChatId}/`);
       webSocket.current.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === "debug") {
-          // Debug message received. Replace newline characters with <br /> tags
           const formattedToken = data.message.replace(/\n/g, '<br />');
           setDebugMessage(prevMessage => prevMessage + formattedToken);
         } else {
-          // Entire message received
-          setLoading(false)
-          const newMessage = {sender: 'AI', content: data['message']};
-          
+          setChatLoading(false);
+          const newMessage = { sender: 'AI', content: data['message'] };
           setMessages(prevMessages => [...prevMessages, newMessage]);
         }
       };
-
       webSocket.current.onclose = () => {
         console.error('Chat socket closed unexpectedly');
+        setChatLoading(false);
       };
-      // Fetch chat messages for currentChatId
-      fetchMessages(currentChatId)
+      fetchMessages(currentChatId);
     }
     return () => {
       webSocket.current?.close();
     };
   }, [currentChatId]);
+
   useEffect(() => {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setInputImage(reader.result as string);
-        handleUpload();
+        handleUpload(file);
       };
       reader.readAsDataURL(file);
-      setButtonText('MRI Görüntüsü İşle');
-    } else {
-      setButtonText('MRI Görüntüsü Yükle');
     }
   }, [file]);
 
   const onChatSelected = (chatId: string | null) => {
-    if (currentChatId === chatId) return; // Prevent unnecessary re-renders.
+    if (currentChatId === chatId) return;
     if (chatId == null) {
-      // Clear messages if no chat is selected
-      setMessages([])
+      setMessages([]);
     }
     setCurrentChatId(chatId);
   };
 
   const onNewUserMessage = (chatId: string, message: Message) => {
+    setChatLoading(true);
     webSocket.current?.send(
       JSON.stringify({
         message: message.content,
@@ -100,167 +143,229 @@ function DetectTumor() {
       })
     );
     setMessages(prevMessages => [...prevMessages, message]);
-    setLoading(true); // Set loading to true when sending a message
   };
 
   const onNewChatCreated = (chatId: string) => {
-    onChatSelected(chatId)
+    onChatSelected(chatId);
   };
 
-  const fetchMessages = (currentChatId: string | null) => {
-    fetch(`http://localhost:8000/api/chats/${currentChatId}/messages/`)
-      .then(response => response.json())
-      .then(data => {
-        setMessages(data)
-      });
+  const fetchMessages = async (currentChatId: string | null) => {
+    setChatLoading(true);
+    try {
+      const response = await fetch(`http://localhost:8000/api/chats/${currentChatId}/messages/`);
+      const data = await response.json();
+      setMessages(data);
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+    } finally {
+      setChatLoading(false);
+    }
   }
 
-  const handleUpload = async () => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 5 seconds
-    setLoading(false);
-    setResult('Tumor Detected');
-    setResultImage('result.png');
-    sendMessageToChat("The brain tumor detected in the MRI is located at coordinates 100 x 150. The tumor size is approximately 2000 square pixels, with a width of 50 pixels and a height of 40 pixels. can you give any info about it use yourmedical info what kind of tumor this would be");
+  const handleUpload = async (file: any) => {
+    setImageLoading(true);
+    try {
+      const bytes: any = await readFileAsBytes(file);
+      const formData = new FormData();
+      formData.append('file', new Blob([bytes]));
+      formData.append('filename', file.name.split('.')[0]);
 
-    // const formData = new FormData();
-    // formData.append('file', file);
+      const response = await axios.post('http://127.0.0.1:5000/predict', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
 
-    // try {
-    //   const response = await axios.post('http://127.0.0.1:5000/upload', formData, {
-    //     headers: {
-    //       'Content-Type': 'multipart/form-data'
-    //     }
-    //   });
-    //   return response.data.filepath;
-    // } catch (error) {
-    //   console.error('Error uploading file:', error);
-    // }
+      // Extract image, tumor properties and GPT-3 prompt from response
+      const { image, tumor_properties, gpt3_prompt } = response.data;
+
+      // Decode base64 image string to URL
+      const imageUrl = `data:image/png;base64,${image}`;
+      setPrompt(gpt3_prompt);
+
+      setResultImage(imageUrl); // Display the image
+    } catch (error:any) {
+      console.error('Error:', error);
+      if (error.response) {
+        const arrayBuffer = error.response.data;
+        const decoder = new TextDecoder('utf-8');
+        const text = decoder.decode(arrayBuffer);
+        console.log(text);
+      }
+    } finally {
+      setImageLoading(false);
+    }
   };
 
-  const sendMessageToChat = (message: string) => {
-    if (currentChatId) {
+  const readFileAsBytes = (file: any) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target && event.target.result) {
+          const arrayBuffer = event.target.result;
+          if (arrayBuffer instanceof ArrayBuffer) {
+            resolve(arrayBuffer);
+          } else {
+            reject(new Error('Failed to read file as ArrayBuffer.'));
+          }
+        } else {
+          reject(new Error('Failed to read file.'));
+        }
+      };
+      reader.onerror = (error) => {
+        reject(error);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  const createNewChat = async (message: string) => {
+    var id;
+    try {
+      const response = await fetch('http://localhost:8000/api/chats/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'New Chat' }) // Adjust this as necessary.
+      });
+      const newChat = await response.json();
+      sideRef?.current?.fetchChats(); // Fetch all chats to update the sidebar
+      onChatSelected(newChat.id); // Select the new chat automatically
+      const newMessage: Message = { sender: 'User', content: message };
+      onNewUserMessage(newChat.id, newMessage);
+      
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+      return null;
+    }
+    
+    
+
+  };
+
+  const sendMessageToChat = async (message: string) => {
+    if (message && currentChatId) {
       const newMessage: Message = { sender: 'User', content: message };
       onNewUserMessage(currentChatId, newMessage);
+    } else if (!currentChatId) {
+      const newChatId = await createNewChat(message);
+        
     }
-  };
-
-  const handleDetect = async () => {
-    const filepath = await handleUpload();
-    try {
-      const response = await axios.post('http://127.0.0.1:5000/detect', { filepath });
-      setResult(response.data.result);
-    } catch (error) {
-      console.error('Error detecting tumor:', error);
-    }
-  };
-
-  const handleProcess = () => {
-    handleDetect();
-    setProcessImages([]);
-    setShowResult(true);
-    setShowSaveButton(true);
   };
 
   const handleSaveResult = () => {
-    // Sonuç kaydetme işlemi
     console.log('Sonuç kaydedildi:', result);
     alert('Sonuç başarıyla kaydedildi!');
   };
 
   return (
-      <Grid container direction="row" alignItems={"start"} >
-      <Grid item xs={6} px={3} pt={2}>
-      <Grid container direction="column" alignItems={"center"} >
-          
-          <Grid item xs={12} textAlign={"center"}>
-            <Typography variant="h4" style={{ color: '#666666' }}>Analyze</Typography>
-            <div {...getRootProps({ style: { border: '2px dashed #eeeeee', padding: '20px', textAlign: 'center' } })}>
+<>
+    <Box bgcolor={"background.default"}>
+    <BackgroundImageBox position={"absolute"} />
+    </Box>
+    <Grid container direction="row" alignItems={"end"} pt={15} >
+      <Grid item xs={3} px={3} pt={2}>
+        <Grid container direction="column" alignItems={"center"} >
+          <Grid item xs={12} textAlign={"center"} sx={{zIndex:1}} >
+            <Typography
+                sx={{
+                    typography: { xs: "h1", sm: "h1", lg: "1" },
+                    background: 'linear-gradient(to bottom, #01579B , #292FD6, #09B9F6)',
+                    backgroundClip: 'text',
+                    color: { xs: 'white', md: 'transparent' },
+                    display: 'inline-block',
+                }}><Box fontWeight={'800'}>Visualize, Detect, Discuss</Box></Typography>
+          </Grid>
+          <Grid item xs={12} textAlign={"center"} sx={{zIndex:1}} pt={20}>
+            <GothicBox {...getRootProps()}>
               <input {...getInputProps() as React.InputHTMLAttributes<HTMLInputElement>} />
               {file ? (
+                <div style={{ height: '158px',  width:'380px', textAlign:"center", alignContent:"center"  }}>
+                  <RotatingIcon />
                 <Typography variant="body2">
-                  Selected file: testimage
+                  Selected file: {file.name}
                 </Typography>
+                </div>
               ) : (
-                <div style={{ padding: '50px 0' }}>
-                  <ImageIcon style={{ fontSize: '64px', color: '#cccccc' }} />
-                  <Typography variant="h6" style={{ color: '#cccccc' }}>
+                <div style={{ height: '158px',  width:'380px', textAlign:"center", alignContent:"center"  }}>
+                  <RotatingIcon />
+                  <Typography variant="h6" style={{ color: '#f5f5f5' }}>
                     Drag & drop a file here, or click to select one
                   </Typography>
                 </div>
               )}
-            </div>
-          </Grid>
-
-          <Grid item xs={12} textAlign={"center"} p={2}>
-            {inputImage && <img src={inputImage} width={"100%"} alt="Input MRI" />}
-          </Grid>
-
-          <Grid item xs={12} textAlign={"center"}>
-            {showResult && (
-              <>
-                <div className="result">
-                  <Typography variant="h6">{result}</Typography>
-                </div>
-                {processImages.map((img, index) => (
-                  <img key={index} src={img} alt={`Process step ${index + 1}`} />
-                ))}
-                {showSaveButton && (
-                  <Button
-                    type="button"
-                    fullWidth
-                    variant="contained"
-                    color="secondary"
-                    sx={{ mt: 3, mb: 2, width: '200px', backgroundColor: '#4CAF50' }}
-                    onClick={handleSaveResult}
-                  >
-                    Sonucu Kaydet
-                  </Button>
-                )}
-              </>
-            )}
+            </GothicBox>
           </Grid>
           
-          <Grid item xs={12} textAlign={"center"} p={2}>
-            {loading ? (
-              <CircularProgress />
-            ) : (
-              resultImage && <img src={resultImage} width={"100%"} alt="Result MRI" />
-            )}
-          </Grid>
-            
         </Grid>
       </Grid>
-
-      <Grid item xs={6}>
-      <AppContainer>
-          <Sidebar onChatSelected={onChatSelected} selectedChatId={currentChatId} />
+          
+      <Grid item xs={9} >
+      <Grid container direction={"column"} >
+        <Grid item xs={12}  sx={{zIndex:1}} >
+        <AppContainer>
+          <Sidebar onChatSelected={onChatSelected} selectedChatId={currentChatId} ref={sideRef}/>
           <ChatContainer debugMode={debugMode}>
             <ChatMenu debugMode={debugMode} setDebugMode={setDebugMode} />
-            <ChatBox messages={messages} isLoading={loading} />
+            <ChatBox messages={messages} isLoading={chatLoading} />
             <ChatInput onNewUserMessage={onNewUserMessage} onNewChatCreated={onNewChatCreated} chatId={currentChatId} />
           </ChatContainer>
           {debugMode && <DebugDrawer message={debugMessage} debugMode={debugMode} />}
         </AppContainer>
+        </Grid>
+        <Grid item xs={12} pt={3}  sx={{zIndex:1}}>
+          <Grid container direction={"row"} alignItems={"center"}  >
+            
+            <Grid item xs={9} >
+            {imageLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '225px', width:'990px' }}>
+              <CircularProgress style={{ color: '#black' }} />
+              </Box>
+            ) : (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '225px', width:'990px' }}>
+              {resultImage ? <img src={resultImage} height={"100%"} alt="Result MRI" />: 
+              <img src='/noimage.png' height={"90%"} alt="No MRI Image" />}
+              </Box>
+            )}
+            </Grid>
+            <Grid item xs={3} >
+            <Button variant="contained" onClick={() => sendMessageToChat(prompt)} disabled={chatLoading} 
+            sx={{bgcolor:"gray", width:"150px",height:"50px"}}>
+              Ask GPT
+            </Button>
+          </Grid>
+          </Grid>
+
       </Grid>
-      </Grid>
+    </Grid>
+    
+    </Grid>
+    
+    </Grid>
+    </>
+    
   );
 }
 
 const AppContainer = styled.div`
   display: flex;
-  width: 50vw;
-  height: 90vh;
+  width: 70vw;
+  height: 60vh;
+  background: #292b2c;
+  border: 2px solid #444;
+  box-shadow: 0 0 15px #000;
+  transform: perspective(1000px);
+  animation: ${fadeIn} 0.5s ease-in-out;
 `;
 
 const ChatContainer = styled.div<{ debugMode: boolean }>`
   display: flex;
   flex-direction: column;
   width: ${({debugMode}) => debugMode ? '70%' : '100%'};
-  transition: all 0.2s; // Smooth transition
-  width: ${({ debugMode }) => debugMode ? '70%' : '100%'};
   transition: all 0.2s;
   height: 100%;
+  background: #292b2c;
+  color: black;
+  border-left: 1px solid #444;
 `;
 
 export default DetectTumor;
