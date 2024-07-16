@@ -152,7 +152,7 @@ def showPredictsByUploadedZip(predictions, zip_file, zip_name):
     SEGMENT_CLASSES = ['background', 'necrotic', 'edema', 'enhancing']
 
     try:
-        # Extract zip file in memory
+        
         z = zipfile.ZipFile(zip_file, 'r')
 
         # Extract flair.nii for original image visualization
