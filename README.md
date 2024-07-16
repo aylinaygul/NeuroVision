@@ -1,5 +1,5 @@
-[poster.pdf](https://github.com/user-attachments/files/16245167/poster.pdf)
-
+![poster](https://github.com/user-attachments/assets/f7606642-7297-4a2d-8440-bd8daef6b88f)
+[presentation.pdf](https://github.com/user-attachments/files/16245196/presentation.pdf)
 
 # For GPT
 redis-server &
